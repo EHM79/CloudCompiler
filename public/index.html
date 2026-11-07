@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CloudCode — Online Compiler & AI Debugger</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2300e599'><path d='M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z'/></svg>">
+</head>
+
+<body>
+  <!-- Top Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-left">
+      <div class="brand" id="brand-logo">
+        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+        </svg>
+        <span class="brand-name">CloudCode</span>
+      </div>
+      <nav class="nav-links">
+        <button class="nav-link active" data-view="compiler" id="nav-compiler">Compiler</button>
+        <button class="nav-link" data-view="snippets" id="nav-snippets">My Snippets</button>
+        <button class="nav-link" data-view="help" id="nav-help">Help</button>
+      </nav>
+    </div>
+
+    <div class="nav-right">
+      <div class="user-badge" id="user-badge" title="Click to edit profile">
+        <span class="user-name" id="user-display-name">Yasin</span>
+        <span class="user-divider">·</span>
+        <span class="user-logout" id="btn-logout" title="Sign out">Logout</span>
+      </div>
+      <button type="button" class="btn btn-secondary hidden" id="btn-login-nav">Sign In</button>
+    </div>
+  </header>
+
+  <!-- Notification Toast -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- VIEW 1: COMPILER VIEW -->
+  <main id="view-compiler" class="view-section active">
+    <!-- Subheader / Control Toolbar -->
+    <section class="toolbar">
+      <div class="toolbar-left">
+        <div class="field-group">
+          <label for="snippet-title" class="field-label">Title</label>
+          <input type="text" id="snippet-title" class="title-input" value="Sum of 1..N" placeholder="Snippet title...">
+        </div>
+
+        <div class="field-group">
+          <label for="language-select" class="field-label">Language</label>
+          <div class="select-wrapper">
+            <select id="language-select" class="lang-select">
+              <option value="cpp" selected>C++</option>
+              <option value="python">Python</option>
+              <option value="java">Java</option>
+              <option value="javascript">JavaScript</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="status-indicator" id="status-pill">
+          <span class="status-dot completed" id="status-dot"></span>
+          <span class="status-text" id="status-text">Completed</span>
+        </div>
+      </div>
+
+      <div class="toolbar-right">
+        <button type="button" class="btn btn-secondary" id="btn-ai-explain"
+          title="Ask Gemini AI to analyze code or explain errors">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path
+              d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z" />
+          </svg>
+          <span>AI Explain</span>
+        </button>
+
+        <button type="button" class="btn btn-secondary" id="btn-save" title="Save to My Snippets (Ctrl+S)">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+            <polyline points="17 21 17 13 7 13 7 21" />
+            <polyline points="7 3 7 8 15 8" />
+          </svg>
+          <span>Save</span>
+        </button>
+
+        <button type="button" class="btn btn-primary" id="btn-run" title="Execute Code (Ctrl+Enter)">
+          <svg class="btn-icon play-icon" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3" />
+          </svg>
+          <span>Run</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Two-Column Workspace -->
+    <div class="compiler-grid">
+      <!-- Left Column: Code Editor -->
+      <section class="editor-pane" aria-label="Code Editor">
+        <div class="editor-wrapper" id="editor-container">
+          <!-- Fallback or CodeMirror will mount here -->
+          <div id="editor"></div>
+        </div>
+        <div class="editor-footer">
+          <span id="editor-stats">Line 1, Col 1</span>
+          <span class="editor-hint">Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to Run</span>
+        </div>
+      </section>
+
+      <!-- Right Column: Input, Output, Recent Runs -->
+      <section class="sidebar-pane">
+        <!-- Card 1: Standard Input (stdin) -->
+        <div class="card card-input">
+          <div class="card-header">
+            <span class="card-title">Input (stdin)</span>
+            <button class="btn-text-action" id="btn-clear-stdin" title="Clear stdin">Clear</button>
+          </div>
+          <div class="card-body">
+            <textarea id="stdin" class="stdin-textarea" placeholder="Input values for cin, input(), etc..."
+              rows="3">5</textarea>
+          </div>
+        </div>
+
+        <!-- Card 2: Output Console & Tabs -->
+        <div class="card card-output">
+          <div class="card-tabs">
+            <button class="tab-btn active" data-tab="tab-output">Output</button>
+            <button class="tab-btn" data-tab="tab-errors">Errors</button>
+            <button class="tab-btn" data-tab="tab-compile">Compile</button>
+            <button class="tab-btn ai-tab" data-tab="tab-ai">
+              <svg class="tab-sparkle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path
+                  d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z" />
+              </svg>
+              AI Explain
+            </button>
+          </div>
+
+          <div class="tab-contents">
+            <!-- Output Tab -->
+            <div id="tab-output" class="tab-content active">
+              <pre id="output-stdout" class="console-box">15</pre>
+            </div>
+
+            <!-- Errors Tab -->
+            <div id="tab-errors" class="tab-content">
+              <div id="error-ai-banner" class="ai-inline-banner hidden">
+                <span>Encountered an error?</span>
+                <button type="button" class="btn-ask-ai" id="btn-ask-ai-error">✨ Ask Gemini to Explain & Fix</button>
+              </div>
+              <pre id="output-stderr" class="console-box empty-notice">No runtime errors.</pre>
+            </div>
+
+            <!-- Compile Output Tab -->
+            <div id="tab-compile" class="tab-content">
+              <div id="compile-ai-banner" class="ai-inline-banner hidden">
+                <span>Compilation failed?</span>
+                <button type="button" class="btn-ask-ai" id="btn-ask-ai-compile">✨ Ask Gemini to Explain & Fix</button>
+              </div>
+              <pre id="output-compile" class="console-box empty-notice">No compilation warnings or errors.</pre>
+            </div>
+
+            <!-- AI Explain Tab -->
+            <div id="tab-ai" class="tab-content">
+              <div id="ai-loading" class="ai-loading hidden">
+                <div class="spinner"></div>
+                <span>Gemini is analyzing your code and error...</span>
+              </div>
+              <div id="ai-content" class="ai-explanation-box">
+                <p class="ai-placeholder">
+                  Click <strong>AI Explain</strong> or click <strong>Ask Gemini</strong> when an error occurs to get
+                  instant root-cause analysis and fixed code.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Output Metrics Footer -->
+          <div class="output-footer">
+            <div class="metric-tags">
+              <span class="metric-chip" id="metric-time">Time: 0.012s</span>
+              <span class="metric-chip" id="metric-mem">Memory: 2.4 MB</span>
+              <span class="metric-chip" id="metric-exit">Exit: 0</span>
+            </div>
+            <button class="btn-text-action" id="btn-copy-output" title="Copy output">Copy</button>
+          </div>
+        </div>
+
+        <!-- Card 3: Recent Runs -->
+        <div class="card card-recent">
+          <div class="card-header">
+            <span class="card-title">Recent runs</span>
+            <button class="btn-text-action" id="btn-clear-runs" title="Clear history">Clear</button>
+          </div>
+          <div class="card-body">
+            <ul class="runs-list" id="recent-runs-list">
+              <li class="run-item" data-run-id="1">
+                <div class="run-info">
+                  <span class="run-status-dot completed"></span>
+                  <span class="run-name">Completed · C++</span>
+                </div>
+                <span class="run-time">2 min ago</span>
+              </li>
+              <li class="run-item" data-run-id="2">
+                <div class="run-info">
+                  <span class="run-status-dot error"></span>
+                  <span class="run-name">Error · C++</span>
+                </div>
+                <span class="run-time">9 min ago</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- VIEW 2: MY SNIPPETS VIEW -->
+  <main id="view-snippets" class="view-section">
+    <div class="snippets-container">
+      <div class="snippets-header">
+        <h1 class="page-title">My Snippets</h1>
+        <div class="snippets-actions">
+          <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input type="text" id="snippet-search" class="search-input" placeholder="Search by title">
+          </div>
+          <button type="button" class="btn btn-primary" id="btn-new-snippet">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span>New snippet</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Snippets Cards Grid -->
+      <div class="snippets-grid" id="snippets-grid">
+        <!-- Rendered dynamically via JavaScript -->
+      </div>
+    </div>
+  </main>
+
+  <!-- VIEW 3: HELP MODAL / VIEW -->
+  <div id="help-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <svg class="modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <h2>CloudCode AI Guide & Help</h2>
+        </div>
+        <button class="modal-close" id="btn-close-help">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="help-section">
+          <h3> Keyboard Shortcuts</h3>
+          <div class="shortcut-list">
+            <div class="shortcut-row">
+              <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>Enter</kbd></span>
+              <span class="shortcut-desc">Run code immediately</span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>S</kbd></span>
+              <span class="shortcut-desc">Save current snippet</span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-keys"><kbd>Tab</kbd></span>
+              <span class="shortcut-desc">Indent code by 4 spaces</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="help-section">
+          <h3> Architecture & Cloud Services</h3>
+          <p>
+            CloudCode runs on <strong>Vercel Serverless Functions</strong> with a <strong>Node.js (Express)</strong> backend and
+            clean modern frontend.
+          </p>
+          <ul>
+            <li><strong>Judge0 API:</strong> Executes code securely in isolated sandboxes.</li>
+            <li><strong>Google Gemini API:</strong> Explains compilation and runtime errors with fixes.</li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <h3> Environment Variables Setup</h3>
+          <p>To connect live Judge0 and Gemini keys, add them to your <code>.env</code> file or Vercel dashboard:</p>
+          <pre class="help-code"><code>JUDGE0_API_URL=https://judge0-ce.p.rapidapi.com
+JUDGE0_API_KEY=your_rapidapi_key
+GEMINI_API_KEY=your_gemini_api_key</code></pre>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btn-help-got-it">Got it</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW 4: AUTH & PROFILE MODAL -->
+  <div id="auth-modal" class="modal-overlay hidden">
+    <div class="modal-card auth-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <svg class="modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          <h2 id="auth-modal-title">Sign In to CloudCode</h2>
+        </div>
+        <button class="modal-close" id="btn-close-auth">&times;</button>
+      </div>
+
+      <form id="auth-form" class="modal-body auth-body">
+        <div class="auth-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 0.25rem;">
+          <button type="button" class="btn btn-secondary active-auth-tab" id="tab-auth-login" style="flex: 1;">Sign In</button>
+          <button type="button" class="btn btn-secondary" id="tab-auth-register" style="flex: 1;">Register</button>
+        </div>
+
+        <p class="auth-hint" id="auth-hint-text">Sign in to sync and manage your personal snippets securely.</p>
+        
+        <div class="field-group-vertical hidden" id="group-auth-name">
+          <label for="auth-input-name" class="field-label">Username / Display Name</label>
+          <input type="text" id="auth-input-name" class="title-input auth-input" placeholder="Choose a username (e.g. Sarah, Ahmed)">
+        </div>
+
+        <div class="field-group-vertical">
+          <label for="auth-input-email" class="field-label">Email Address</label>
+          <input type="email" id="auth-input-email" class="title-input auth-input" placeholder="developer@example.com" required autocomplete="email">
+        </div>
+
+        <div class="field-group-vertical">
+          <label for="auth-input-password" class="field-label">Password</label>
+          <input type="password" id="auth-input-password" class="title-input auth-input" placeholder="Password (min 6 characters)" required autocomplete="current-password">
+        </div>
+
+        <div id="auth-error-msg" style="color: var(--accent-red); font-size: 0.85rem; display: none;"></div>
+
+        <div class="modal-footer auth-footer" style="padding: 0; border: none; margin-top: 0.5rem;">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-auth">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-auth">Sign In</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="script.js"></script>
+</body>
+
+</html>
