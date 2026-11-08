@@ -322,6 +322,105 @@ async function logoutUser() {
 // ==============================================================================
 // Fallback Code Editor (Built-in standalone with line numbers & tab support)
 // ==============================================================================
+// ------------------------------------------------------------------------------
+// Lightweight syntax highlighter (VS Code "Dark+" colours) for the fallback editor
+// ------------------------------------------------------------------------------
+const hlWords = (s) => new Set(s.split(/\s+/).filter(Boolean));
+const HL_END = "(?![\\s\\S])"; // end of input (we use the "m" flag, so "$" would match at every line end)
+
+const HL_RX_NUM = /\b0[xX][0-9a-fA-F]+[uUlL]*\b|\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[fFlLuU]*\b/.source;
+const HL_RX_PP = /^[ \t]*#[^\n]*/.source;
+const HL_RX_C_COMMENT = `\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?(?:\\*\\/|${HL_END})`;
+const HL_RX_STR = /"(?:\\.|[^"\\\n])*"?|'(?:\\.|[^'\\\n])*'?/.source;
+
+const HL_LANGS = {
+  cpp: {
+    comment: HL_RX_C_COMMENT,
+    string: HL_RX_STR,
+    pp: true,
+    ctl: hlWords("if else for while do switch case default break continue return goto try catch throw"),
+    kw: hlWords("auto const constexpr static extern inline virtual override final explicit mutable volatile register struct class union enum namespace using typedef template typename public private protected new delete sizeof this operator friend true false nullptr NULL"),
+    types: hlWords("int long short char float double bool void unsigned signed size_t string vector map set unordered_map unordered_set pair queue stack deque list array wchar_t int8_t int16_t int32_t int64_t uint8_t uint16_t uint32_t uint64_t"),
+  },
+  java: {
+    comment: HL_RX_C_COMMENT,
+    string: HL_RX_STR,
+    pp: false,
+    ctl: hlWords("if else for while do switch case default break continue return try catch finally throw throws"),
+    kw: hlWords("public private protected static final abstract class interface extends implements import package new this super instanceof enum synchronized volatile transient native true false null var"),
+    types: hlWords("int long short byte char float double boolean void String Integer Long Double Boolean Character Object List Map Set ArrayList HashMap HashSet Scanner System Math"),
+  },
+  javascript: {
+    comment: HL_RX_C_COMMENT,
+    string: `\`(?:\\\\[\\s\\S]|[^\`\\\\])*\`?|${HL_RX_STR}`,
+    pp: false,
+    ctl: hlWords("if else for while do switch case default break continue return try catch finally throw await yield"),
+    kw: hlWords("const let var function class extends new this super import export from as async typeof instanceof in of delete void true false null undefined static get set console"),
+    types: hlWords("Array Object String Number Boolean Map Set Promise Math JSON Date RegExp Error"),
+  },
+  python: {
+    comment: "#[^\\n]*",
+    string: `"""[\\s\\S]*?(?:"""|${HL_END})|'''[\\s\\S]*?(?:'''|${HL_END})|${HL_RX_STR}`,
+    pp: false,
+    ctl: hlWords("if elif else for while break continue return try except finally raise with yield assert"),
+    kw: hlWords("def class lambda import from as in is not and or None True False global nonlocal del async await self cls pass"),
+    types: hlWords("int str float bool list dict set tuple bytes object range type complex frozenset"),
+  },
+};
+
+function hlEscape(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function highlightCode(code, lang) {
+  const cfg = HL_LANGS[lang] || HL_LANGS.cpp;
+  if (!cfg.re) {
+    cfg.re = new RegExp(
+      `(?<cm>${cfg.comment})|(?<str>${cfg.string})|(?<pp>${cfg.pp ? HL_RX_PP : "[^\\s\\S]"})|(?<num>${HL_RX_NUM})|(?<id>[A-Za-z_$][\\w$]*)`,
+      "gm"
+    );
+  }
+  const re = cfg.re;
+  re.lastIndex = 0;
+
+  let out = "";
+  let last = 0;
+  let m;
+  while ((m = re.exec(code)) !== null) {
+    const text = m[0];
+    if (text === "") { re.lastIndex++; continue; }
+
+    out += hlEscape(code.slice(last, m.index));
+    last = m.index + text.length;
+    const g = m.groups;
+
+    if (g.cm !== undefined) {
+      out += `<span class="tok-comment">${hlEscape(text)}</span>`;
+    } else if (g.str !== undefined) {
+      out += `<span class="tok-string">${hlEscape(text)}</span>`;
+    } else if (g.pp !== undefined) {
+      const pm = /^([ \t]*#[ \t]*\w*)([^\n]*)$/.exec(text);
+      const head = pm ? pm[1] : text;
+      const rest = pm ? pm[2] : "";
+      out += `<span class="tok-pp">${hlEscape(head)}</span>` +
+        hlEscape(rest).replace(/(&lt;.*?&gt;|".*?")/, '<span class="tok-string">$1</span>');
+    } else if (g.num !== undefined) {
+      out += `<span class="tok-num">${hlEscape(text)}</span>`;
+    } else {
+      let cls = "";
+      if (cfg.ctl.has(text)) cls = "tok-ctl";
+      else if (cfg.kw.has(text)) cls = "tok-kw";
+      else if (cfg.types.has(text)) cls = "tok-type";
+      else if (/^[A-Z][A-Za-z0-9_$]*$/.test(text) && /[a-z]/.test(text)) cls = "tok-type";
+      else if (/^[A-Z_][A-Z0-9_]+$/.test(text)) cls = "tok-const";
+      else if (/^[ \t]*\(/.test(code.slice(last, last + 16))) cls = "tok-fn";
+      out += cls ? `<span class="${cls}">${hlEscape(text)}</span>` : hlEscape(text);
+    }
+  }
+  out += hlEscape(code.slice(last));
+  return out;
+}
+
 class StandaloneEditor {
   constructor(container, initialCode, onUpdate) {
     this.container = container;
@@ -337,6 +436,13 @@ class StandaloneEditor {
     this.textareaWrap = document.createElement("div");
     this.textareaWrap.className = "fallback-textarea-wrap";
 
+    this.lang = "cpp";
+    this.highlightPre = document.createElement("pre");
+    this.highlightPre.className = "fallback-highlight";
+    this.highlightPre.setAttribute("aria-hidden", "true");
+    this.highlightEl = document.createElement("code");
+    this.highlightPre.appendChild(this.highlightEl);
+
     this.textarea = document.createElement("textarea");
     this.textarea.className = "fallback-textarea";
     this.textarea.value = initialCode || "";
@@ -345,6 +451,7 @@ class StandaloneEditor {
     this.textarea.setAttribute("autocorrect", "off");
     this.textarea.setAttribute("autocapitalize", "off");
 
+    this.textareaWrap.appendChild(this.highlightPre);
     this.textareaWrap.appendChild(this.textarea);
     this.wrapper.appendChild(this.gutters);
     this.wrapper.appendChild(this.textareaWrap);
@@ -352,17 +459,20 @@ class StandaloneEditor {
 
     this.bindEvents();
     this.updateLineNumbers();
+    this.updateHighlight();
   }
 
   bindEvents() {
     this.textarea.addEventListener("input", () => {
       this.updateLineNumbers();
+      this.updateHighlight();
       this.updateCursorStats();
       if (this.onUpdate) this.onUpdate(this.getValue());
     });
 
     this.textarea.addEventListener("scroll", () => {
       this.gutters.scrollTop = this.textarea.scrollTop;
+      this.syncHighlightScroll();
     });
 
     this.textarea.addEventListener("keydown", (e) => {
@@ -375,6 +485,7 @@ class StandaloneEditor {
         this.textarea.value = val.substring(0, start) + "    " + val.substring(end);
         this.textarea.selectionStart = this.textarea.selectionEnd = start + 4;
         this.updateLineNumbers();
+        this.updateHighlight();
         this.updateCursorStats();
         if (this.onUpdate) this.onUpdate(this.getValue());
       }
@@ -411,7 +522,24 @@ class StandaloneEditor {
   setValue(val) {
     this.textarea.value = val;
     this.updateLineNumbers();
+    this.updateHighlight();
     this.updateCursorStats();
+  }
+
+  setLanguage(lang) {
+    this.lang = lang;
+    this.updateHighlight();
+  }
+
+  updateHighlight() {
+    // Trailing "\n " keeps the last (empty) line the same height as in the textarea.
+    this.highlightEl.innerHTML = highlightCode(this.textarea.value, this.lang) + "\n ";
+    this.syncHighlightScroll();
+  }
+
+  syncHighlightScroll() {
+    this.highlightPre.scrollTop = this.textarea.scrollTop;
+    this.highlightPre.scrollLeft = this.textarea.scrollLeft;
   }
 
   focus() {
@@ -427,13 +555,26 @@ async function initEditor() {
 
   try {
     // Attempt dynamic import of CodeMirror 6 from esm.sh
-    const { EditorView, basicSetup } = await import("https://esm.sh/codemirror@6.0.1?bundle");
-    const { Compartment } = await import("https://esm.sh/@codemirror/state@6.4.1?bundle");
-    const { cpp } = await import("https://esm.sh/@codemirror/lang-cpp@6.0.2?bundle");
-    const { python } = await import("https://esm.sh/@codemirror/lang-python@6.1.6?bundle");
-    const { java } = await import("https://esm.sh/@codemirror/lang-java@6.0.1?bundle");
-    const { javascript } = await import("https://esm.sh/@codemirror/lang-javascript@6.2.2?bundle");
-    const { oneDark } = await import("https://esm.sh/@codemirror/theme-one-dark@6.1.2?bundle");
+    // NOTE: no "?bundle" and no exact version pins on purpose. With "?bundle" every package
+    // ships its own private copy of @codemirror/state & @codemirror/view, and two copies
+    // make CodeMirror throw "Unrecognized extension value in extension set". Using only the
+    // major version lets esm.sh resolve ONE shared copy for all packages.
+    const [cmMod, stateMod, cppMod, pyMod, javaMod, jsMod, themeMod] = await Promise.all([
+      import("https://esm.sh/codemirror@6"),
+      import("https://esm.sh/@codemirror/state@6"),
+      import("https://esm.sh/@codemirror/lang-cpp@6"),
+      import("https://esm.sh/@codemirror/lang-python@6"),
+      import("https://esm.sh/@codemirror/lang-java@6"),
+      import("https://esm.sh/@codemirror/lang-javascript@6"),
+      import("https://esm.sh/@codemirror/theme-one-dark@6"),
+    ]);
+    const { EditorView, basicSetup } = cmMod;
+    const { Compartment } = stateMod;
+    const { cpp } = cppMod;
+    const { python } = pyMod;
+    const { java } = javaMod;
+    const { javascript } = jsMod;
+    const { oneDark } = themeMod;
 
     const languageConf = new Compartment();
     const langMap = { cpp, python, java, javascript };
@@ -483,7 +624,7 @@ async function initEditor() {
     state.editorInstance = {
       getValue: () => fallback.getValue(),
       setValue: (val) => fallback.setValue(val),
-      setLanguage: () => {},
+      setLanguage: (lang) => fallback.setLanguage(lang),
       focus: () => fallback.focus()
     };
   }
@@ -1178,4 +1319,3 @@ window.addEventListener("DOMContentLoaded", async () => {
   renderRecentRuns();
   fetchSnippets();
 });
-
