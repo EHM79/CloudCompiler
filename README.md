@@ -1,143 +1,155 @@
-# CloudCode — CloudCompiler AI ⚡
+# CloudCode
 
-منصة سحابية متكاملة لتجميع وتشغيل الأكواد البرمجية مع مساعد ذكاء اصطناعي (Gemini) لشرح وتصحيح الأخطاء، مبنية على بنية Vercel Serverless Functions + **Node.js (Express)** + CodeMirror 6 + Judge0 API.
+**A cloud-based online compiler with an AI debugging assistant.**
+Write, run, and debug code in your browser, then let Gemini explain what went wrong and how to fix it.
 
----
-
-## 🌟 مميزات المشروع
-
-- **تصميم عصري متطابق بالكامل مع التصميم المعتمد (CloudCode UI Mockups)**:
-  - ثيم داكن احترافي (Dark Theme) مطابق لصور التصميم.
-  - شريط تنقل علوي (`Compiler` / `My Snippets` / `Help` / `Yasin · Logout`).
-  - شريط تحكم كامل (تعديل عنوان الكود `Title`، اختيار اللغة `Language`، مؤشر الحالة `Completed / Running / Error`، أزرار `Save` و `▶ Run` و `AI Explain`).
-- **محرر أكواد متقدم (CodeMirror 6 + Standalone Resilient Fallback)**:
-  - ترقيم أسطر، تمييز صيغة، دعم اختصارات لوحة المفاتيح (`Ctrl + Enter` للتشغيل، `Ctrl + S` للحفظ).
-  - مدمج معه محرر احترافي احتياطي يعمل بلا إنترنت وبدون أي اعتماديات خارجية في حال تعذر الاتصال بـ CDN.
-- **لوحة تفاعلية للإدخال والإخراج (Input / Output Tabs)**:
-  - بطاقة الإدخال القياسي `Input (stdin)`.
-  - تبويبات: `Output`، `Errors`، `Compile`، و `✨ AI Explain`.
-  - تفاصيل الأداء: وقت التنفيذ (Time)، استهلاك الذاكرة (Memory)، وكود الخروج (Exit Code).
-  - سجل التشغيل الأخير `Recent runs` مع إمكانية مراجعة أي نتيجة سابقة بنقرة واحدة.
-- **إدارة كاملة للمقتطفات البرمجية (My Snippets)**:
-  - حفظ المقتطفات وتعديلها وحذفها.
-  - بحث فوري بالعنوان (`Search by title`).
-  - زر إنشاء مقتطف جديد `+ New snippet`.
-- **تنفيذ الأكواد الآمن عبر Judge0 API**:
-  - دعم لغات C++, Python, Java, JavaScript.
-  - إمكانية العمل مع RapidAPI Judge0 أو النسخة الذاتية الاستضافة (Judge0 CE).
-  - محاكي تشغيل محلي آمن للاختبار والتطوير بدون مفاتيح خارجية.
-- **مساعد تصحيح الأخطاء الذكي (Gemini AI Debugger)**:
-  - تحليل فوري لأسباب الخطأ وسطر العطل مع اقتراح كود بديل مصحح.
-  - محلل تشخيصي مدمج (Static Analyzer) يعمل حتى في حال عدم تفعيل مفتاح Gemini.
+**Live demo:** [cloud-compiler-green.vercel.app](https://cloud-compiler-green.vercel.app)
 
 ---
 
-## 🏗️ هيكلية المشروع (Architecture)
+## Features
+
+- **Run code instantly** in C++, Python, Java, and JavaScript, executed in isolated sandboxes through [Judge0](https://judge0.com/).
+- **AI Explain** — when your code fails, Gemini points to the root cause, explains the fix, and returns corrected code. Without a Gemini key, a built-in static analyzer takes over, so the feature never goes dark.
+- **A real code editor** — [CodeMirror 6](https://codemirror.net/) with line numbers and syntax highlighting. If the editor can't be loaded from the CDN, a lightweight built-in editor takes its place.
+- **Input and output panels** — provide `stdin`, then inspect `Output`, `Errors`, and `Compile` results along with execution time, memory usage, and exit code.
+- **Recent runs** — jump back to any previous result with one click.
+- **User accounts** — register and sign in with email and password (bcrypt hashing, JWT in an HTTP-only cookie).
+- **My Snippets** — save, search, reopen, and delete your code.
+- **Keyboard shortcuts** — `Ctrl + Enter` to run, `Ctrl + S` to save.
+
+## Tech stack
+
+| Layer | Technology |
+| --- | --- |
+| Frontend | HTML, CSS, vanilla JavaScript (ES modules), CodeMirror 6 |
+| Backend | Node.js 22+, Express 4 |
+| Database | MongoDB (MongoDB Atlas) with Mongoose |
+| Auth | JSON Web Tokens, bcryptjs, HTTP-only cookies |
+| Code execution | Judge0 CE |
+| AI | Google Gemini API |
+| Hosting | Vercel (serverless) |
+
+## How it works
 
 ```text
-User Browser
-     │
-     ▼
-Vercel Project
- ├── Frontend (public/)            HTML / CSS / JS + CodeMirror 6
- │        │
- │        │  POST /api/run , POST /api/debug
- │        ▼
- └── Express Backend (app.js)
-          ├── Judge0 API    (تنفيذ الكود)
-          └── Gemini API    (شرح وتصحيح الأخطاء)
+Browser (public/)
+   │  HTML · CSS · JS · CodeMirror 6
+   ▼
+Express app (app.js)
+   ├── /api/auth/*      → register, login, profile, logout   ──► MongoDB
+   ├── /api/snippets    → save, list, delete snippets        ──► MongoDB
+   ├── /api/run         → execute code                       ──► Judge0
+   ├── /api/debug       → explain and fix errors             ──► Gemini
+   └── /api/health      → service health check
 ```
 
----
+## Project structure
 
-## 🚀 التشغيل المحلي (Local Development)
+```text
+.
+├── app.js                  # Express app and entry point
+├── public/                 # Frontend (index.html, style.css, script.js)
+├── src/
+│   ├── config/             # Database connection and constants
+│   ├── controllers/        # Request handlers
+│   ├── middlewares/        # Auth and error handling
+│   ├── models/             # Mongoose models (User, Snippet)
+│   ├── routes/             # API route definitions
+│   ├── services/           # Judge0, Gemini, and static diagnostics
+│   └── utils/              # JWT helpers
+├── tests/                  # API tests
+└── vercel.json             # Vercel configuration
+```
 
-### 1. المتطلبات:
-- **Node.js 22 LTS** أو أحدث
-- npm
+## Getting started
 
-### 2. تثبيت المكتبات:
+### Prerequisites
+
+- Node.js 22 or newer
+- A MongoDB database ([MongoDB Atlas](https://www.mongodb.com/atlas) has a free tier)
+
+### Installation
+
 ```bash
+git clone https://github.com/EHM79/CloudCompiler.git
+cd CloudCompiler
 npm install
-```
-
-### 3. إعداد ملف البيئة (اختياري للربط المباشر):
-انسخ ملف `.env.example` إلى `.env`:
-```bash
 cp .env.example .env
 ```
-وقم بإضافة مفاتيحك:
-```env
-JUDGE0_API_URL=https://judge0-ce.p.rapidapi.com
-JUDGE0_API_KEY=your_rapidapi_key
-JUDGE0_API_HOST=judge0-ce.p.rapidapi.com
-GEMINI_API_KEY=your_gemini_api_key
-```
 
-### 4. تشغيل خادم التطوير:
+Open `.env` and fill in at least `DATABASE_URL` and `JWT_SECRET` (see [Environment variables](#environment-variables)).
+
+### Run locally
+
 ```bash
+npm run dev     # starts the server with auto-reload
+# or
 npm start
 ```
-أو مع Vercel CLI:
-```bash
-vercel dev
-```
-افتح المتصفح على: `http://localhost:5000`
 
-### 5. تشغيل الاختبارات الآلية:
+Then open <http://localhost:5000>.
+
+### Run the tests
+
 ```bash
 npm test
 ```
 
----
+## Environment variables
 
-## ☁️ خطوات النشر على Vercel (Deployment)
+| Variable | Required | Description |
+| --- | :---: | --- |
+| `DATABASE_URL` | Yes | MongoDB connection string, e.g. `mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/cloudcompiler?retryWrites=true&w=majority` |
+| `JWT_SECRET` | In production | A long, random secret used to sign login tokens |
+| `JWT_EXPIRES_IN` | | Token lifetime. Defaults to `7d` |
+| `GEMINI_API_KEY` | | Enables Gemini-powered explanations. Without it, the built-in analyzer is used. Get a key from [Google AI Studio](https://aistudio.google.com/) |
+| `GEMINI_MODEL` | | Overrides the first Gemini model to try. Defaults to a list of current stable models |
+| `JUDGE0_API_URL` | | Judge0 endpoint. Defaults to `https://ce.judge0.com` |
+| `JUDGE0_API_KEY` | | Only needed if your Judge0 provider requires a key |
+| `COOKIE_SECURE` | | Set to `true` on HTTPS deployments such as Vercel |
+| `COOKIE_SAMESITE` | | Defaults to `lax` |
+| `CLIENT_ORIGIN` | | Only needed if the frontend is served from a different origin |
+| `PORT` | | Local server port. Defaults to `5000` |
 
-1. **ارفع المشروع على مستودع GitHub**:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial CloudCompiler Express deployment"
-   git branch -M main
-   git remote add origin YOUR_GITHUB_REPOSITORY_URL
-   git push -u origin main
-   ```
-
-2. **الربط مع Vercel**:
-   - ادخل إلى [vercel.com](https://vercel.com) واضغط **Add New Project**.
-   - اختر مستودع المشروع من GitHub.
-   - اترك إعدادات Build بدون تغيير (Vercel سيكتشف ملفات `public/` و `app.js` تلقائيًا عبر `vercel.json`).
-
-3. **إضافة متغيرات البيئة في Vercel**:
-   - توجه إلى: **Settings → Environment Variables**
-   - أضف المتغيرات:
-     - `JUDGE0_API_URL`: عنوان مزود Judge0
-     - `JUDGE0_API_KEY`: مفتاح RapidAPI أو Judge0
-     - `GEMINI_API_KEY`: مفتاح Google AI Studio Gemini
-   - اضغط **Deploy**!
-
+> **Never commit your `.env` file or put secrets in `public/script.js`.**
 
 ## Deploying to Vercel
 
-This repository includes a Vercel configuration for the existing Express app and its
-`public` frontend. Import the repository into Vercel with the project root as the
-Root Directory; do not select a subfolder.
+1. Push the repository to GitHub.
+2. In [Vercel](https://vercel.com), choose **Add New → Project** and import the repository. Keep the project root as the Root Directory.
+3. Under **Settings → Environment Variables**, add the variables above (at minimum `DATABASE_URL` and `JWT_SECRET`, plus `COOKIE_SECURE=true`).
+4. In **MongoDB Atlas → Network Access**, allow connections from `0.0.0.0/0`. Vercel does not use fixed IP addresses.
+5. Deploy. Environment variable changes only apply to new deployments, so redeploy after editing them.
 
-Add these Environment Variables in Vercel (Production and Preview as needed):
+After deploying, check `/api/health`, then try registering, running some code, and using AI Explain.
 
-- `DATABASE_URL` — MongoDB Atlas connection string
-- `JWT_SECRET` — a long, random secret (required in production)
-- `GEMINI_API_KEY` — optional; without it, the built-in static diagnostics are used
-- `JUDGE0_API_URL` — optional; defaults to `https://ce.judge0.com`
-- `JUDGE0_API_KEY` — optional; only needed if your Judge0 provider requires it
-- `COOKIE_SECURE` — set to `true` on Vercel
-- `COOKIE_SAMESITE` — `lax` for the same-origin deployment
+## API reference
 
-The Vercel Hobby plan is intended for personal/non-commercial use and has usage
-limits. MongoDB, Gemini, and Judge0 have their own separate limits and availability.
-Keep secrets out of GitHub and never put API keys in `public/script.js`.
+| Method | Endpoint | Auth | Description |
+| --- | --- | :---: | --- |
+| `GET` | `/api/health` | | Service health check |
+| `GET` | `/api/languages` | | List supported languages |
+| `POST` | `/api/run` | | Execute code (rate limited) |
+| `POST` | `/api/debug` | Yes | AI explanation of errors (rate limited) |
+| `POST` | `/api/auth/register` | | Create an account |
+| `POST` | `/api/auth/login` | | Sign in |
+| `GET` | `/api/auth/me` | | Current user profile |
+| `POST` | `/api/auth/logout` | | Sign out |
+| `GET` | `/api/snippets` | Yes | List your snippets |
+| `POST` | `/api/snippets` | Yes | Create or update a snippet |
+| `DELETE` | `/api/snippets/:id` | Yes | Delete a snippet |
 
-After deployment, verify `/`, `/languages`, `/api/health`, registration/login, code
-execution, and AI debugging. The deployment configuration cannot guarantee that
-external MongoDB, Judge0, or Gemini services are reachable or within their free
-quotas.
+## Troubleshooting
+
+- **`Database unavailable` or `buffering timed out`** — check that `DATABASE_URL` is set and complete (it must include the full host, ending in `.mongodb.net`), that the database user's password is correct, and that Atlas allows `0.0.0.0/0`.
+- **`JWT_SECRET must be configured`** — add `JWT_SECRET` to your environment variables.
+- **AI Explain is unavailable** — check the function logs for the underlying Gemini error. The most common causes are an invalid key, an exhausted quota, or a model that Google has retired. Set `GEMINI_MODEL` to a current model to fix the last one.
+
+## Limits
+
+Free tiers of Vercel, MongoDB Atlas, Judge0, and Gemini come with usage limits and no availability guarantees. Each runs on its own quota, so one can fail while the others keep working.
+
+## Contributing
+
+Issues and pull requests are welcome. Please run `npm test` before submitting changes.
