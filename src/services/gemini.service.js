@@ -4,6 +4,20 @@
 
 import { smartStaticAnalysis } from "./diagnostic.service.js";
 
+// Current stable models, tried in order. Google retires old models over time
+// (gemini-1.5-flash is gone, gemini-2.5-flash is limited to existing users),
+// so you can override the first choice with the GEMINI_MODEL environment variable.
+const DEFAULT_MODELS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
+
+// Vercel Hobby functions time out at ~10s, so keep each attempt short.
+const REQUEST_TIMEOUT_MS = 9000;
+
+function getModelList() {
+  const custom = process.env.GEMINI_MODEL?.trim();
+  if (!custom) return DEFAULT_MODELS;
+  return [custom, ...DEFAULT_MODELS.filter((m) => m !== custom)];
+}
+
 export async function explainErrorWithGemini({ code, language = "cpp", error = "", output = "", stdin = "" }) {
   const geminiKey = process.env.GEMINI_API_KEY?.trim();
 
@@ -44,43 +58,66 @@ Please provide a helpful, concise, well-structured response with:
     ],
     generationConfig: {
       temperature: 0.3,
-      maxOutputTokens: 2048,
+      // Newer models count their internal "thinking" tokens inside this limit,
+      // so 2048 could leave no room for the visible answer.
+      maxOutputTokens: 8192,
     },
   };
 
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
-  let geminiRes = await fetch(geminiUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(geminiPayload),
-    signal: AbortSignal.timeout(15000),
-  });
+  // Every failed attempt is recorded so the server log shows the REAL reason
+  // (the API key is sent in a header, never in the URL, so it can't leak into logs).
+  const failures = [];
 
-  if (!geminiRes.ok) {
-    // Fallback to gemini-1.5-flash
-    const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
-    geminiRes = await fetch(fallbackUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(geminiPayload),
-      signal: AbortSignal.timeout(15000),
-    });
+  for (const model of getModelList()) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+    let res;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": geminiKey,
+        },
+        body: JSON.stringify(geminiPayload),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch (err) {
+      failures.push(`${model}: ${err.name === "TimeoutError" ? "timeout" : err.message}`);
+      continue;
+    }
+
+    if (!res.ok) {
+      let detail = "";
+      try {
+        const body = await res.json();
+        detail = body?.error?.message || "";
+      } catch {
+        // ignore body parse errors
+      }
+      failures.push(`${model}: HTTP ${res.status}${detail ? ` - ${detail}` : ""}`);
+      continue;
+    }
+
+    const data = await res.json();
+    const parts = data?.candidates?.[0]?.content?.parts ?? [];
+    const text = parts
+      .filter((p) => typeof p.text === "string" && !p.thought)
+      .map((p) => p.text)
+      .join("");
+
+    if (!text) {
+      failures.push(`${model}: empty response (finishReason: ${data?.candidates?.[0]?.finishReason ?? "unknown"})`);
+      continue;
+    }
+
+    return {
+      status: "success",
+      mode: "gemini",
+      explanation: text,
+      model,
+    };
   }
 
-  if (!geminiRes.ok) {
-    throw new Error(`Gemini API error (HTTP ${geminiRes.status})`);
-  }
-
-  const data = await geminiRes.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) {
-    throw new Error("Empty response candidate from Gemini API");
-  }
-
-  return {
-    status: "success",
-    mode: "gemini",
-    explanation: text,
-    model: "gemini-flash",
-  };
+  throw new Error(`Gemini API error - all models failed: ${failures.join(" | ")}`);
 }
