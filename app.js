@@ -43,6 +43,16 @@ app.get("/languages", (req, res) => {
   res.json(ALLOWED_LANGUAGES);
 });
 
+// 3b. تأكد من اتصال الداتابيز قبل التسجيل/الدخول/الـ snippets وأظهر السبب الحقيقي لو فشل
+app.use(["/api/auth/register", "/api/auth/login", "/api/snippets"], async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error("[DB]", err.message);
+    res.status(503).json({ error: `Database unavailable: ${err.message}` });
+  }
+});
 // 4. API Routes Mount Point
 app.use("/api", apiRouter);
 
